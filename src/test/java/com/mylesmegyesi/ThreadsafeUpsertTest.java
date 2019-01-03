@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.postgresql.util.PSQLException;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -28,6 +30,7 @@ class ThreadsafeUpsertTest {
     private static final String POSTGRES_PASSWORD = "postgres";
     private static final String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
     private static final String POSTGRES_INSERT = "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)";
+    private static final String POSTGRES_UPDATE = "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
     private static final String POSTGRES_CREATE_TABLE = "CREATE TABLE people (" +
             "id uuid PRIMARY KEY, " +
             "name varchar(255) NOT NULL, " +
@@ -35,6 +38,8 @@ class ThreadsafeUpsertTest {
             "created_at timestamp with time zone, " +
             "updated_at timestamp with time zone" +
             ")";
+    private static final Pattern POSTGRES_DUPLICATE_EMAIL_PATTERN = Pattern
+            .compile(".*duplicate key value violates unique constraint \"people_email_key\".*", Pattern.DOTALL);
 
     private final Instant now = Instant.now();
     private final Properties props = getPostgresProperties();
@@ -98,7 +103,40 @@ class ThreadsafeUpsertTest {
         }
     }
 
+    @Test
+    void updates_the_persons_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
+        try (Connection connection = getPostgresTestDatabaseConnection()) {
+            Instant updatedAt = now.minus(Duration.ofDays(1));
+            UpsertResult firstUpsertResult = upsert(connection, "j@j.com", "John", updatedAt);
+            assertThat(firstUpsertResult, equalTo(UpsertResult.Success));
+
+            UpsertResult secondUpsertResult = upsert(connection, "j@j.com", "Johnathon", now);
+            assertThat(secondUpsertResult, equalTo(UpsertResult.Success));
+
+            List<Person> allPeople = fetchAllPeople(connection);
+
+            assertThat(allPeople, hasSize(1));
+            Person person = allPeople.get(0);
+            assertThat(person.getEmail(), equalTo("j@j.com"));
+            assertThat(person.getName(), equalTo("Johnathon"));
+            assertThat(person.getCreatedAt(), equalTo(updatedAt));
+            assertThat(person.getUpdatedAt(), equalTo(now));
+        }
+    }
+
     private UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+        try {
+            return insert(connection, email, name, updatedAt);
+        } catch (PSQLException e) {
+            if (!isDuplicateEmailError(e)) {
+                throw e;
+            } else {
+                return update(connection, email, name, updatedAt);
+            }
+        }
+    }
+
+    private UpsertResult insert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(POSTGRES_INSERT)) {
             statement.setObject(1, UUID.randomUUID());
             statement.setString(2, email);
@@ -109,6 +147,22 @@ class ThreadsafeUpsertTest {
             statement.execute();
             return UpsertResult.Success;
         }
+    }
+
+    private UpsertResult update(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(POSTGRES_UPDATE)) {
+            statement.setString(1, name);
+            Timestamp timestamp = Timestamp.from(updatedAt);
+            statement.setTimestamp(2, timestamp);
+            statement.setString(3, email);
+            statement.setTimestamp(4, timestamp);
+            statement.execute();
+            return UpsertResult.Success;
+        }
+    }
+
+    private boolean isDuplicateEmailError(PSQLException e) {
+        return POSTGRES_DUPLICATE_EMAIL_PATTERN.matcher(e.getMessage()).matches();
     }
 
     private List<Person> fetchAllPeople(Connection connection) throws SQLException {
