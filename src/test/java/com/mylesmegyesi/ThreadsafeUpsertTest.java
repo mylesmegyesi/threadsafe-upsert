@@ -19,10 +19,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.IntFunction;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
+import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 
 class ThreadsafeUpsertTest {
@@ -42,12 +49,30 @@ class ThreadsafeUpsertTest {
             .compile(".*duplicate key value violates unique constraint \"people_email_key\".*", Pattern.DOTALL);
 
     private final Instant now = Instant.now();
+    private final Instant yesterday = now.minus(Duration.ofDays(1));
     private final Properties props = getPostgresProperties();
     private Connection masterDatabaseConnection;
 
     @BeforeAll
     static void beforeAll() throws ClassNotFoundException {
         Class.forName("org.postgresql.Driver");
+    }
+
+    private static <T> List<T> executeNTimesInParallel(int numThreads, int times, IntFunction<T> f) {
+        ExecutorService threadPool = Executors.newFixedThreadPool(numThreads);
+        try {
+            return IntStream.range(0, times)
+                    .mapToObj(i -> threadPool.submit(() -> f.apply(i)))
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).collect(toList());
+        } finally {
+            threadPool.shutdown();
+        }
     }
 
     @BeforeEach
@@ -88,8 +113,7 @@ class ThreadsafeUpsertTest {
     @Test
     void creates_a_person_if_they_do_not_exist() throws SQLException {
         try (Connection connection = getPostgresTestDatabaseConnection()) {
-            Instant updatedAt = now.minus(Duration.ofDays(1));
-            UpsertResult result = upsert(connection, "j@j.com", "John", updatedAt);
+            UpsertResult result = upsert(connection, "j@j.com", "John", yesterday);
             assertThat(result, equalTo(UpsertResult.Success));
 
             List<Person> allPeople = fetchAllPeople(connection);
@@ -98,13 +122,13 @@ class ThreadsafeUpsertTest {
             Person person = allPeople.get(0);
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("John"));
-            assertThat(person.getCreatedAt(), equalTo(updatedAt));
-            assertThat(person.getUpdatedAt(), equalTo(updatedAt));
+            assertThat(person.getCreatedAt(), equalTo(yesterday));
+            assertThat(person.getUpdatedAt(), equalTo(yesterday));
         }
     }
 
     @Test
-    void updates_the_persons_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
+    void updates_the_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
         try (Connection connection = getPostgresTestDatabaseConnection()) {
             Instant updatedAt = now.minus(Duration.ofDays(1));
             UpsertResult firstUpsertResult = upsert(connection, "j@j.com", "John", updatedAt);
@@ -120,6 +144,60 @@ class ThreadsafeUpsertTest {
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("Johnathon"));
             assertThat(person.getCreatedAt(), equalTo(updatedAt));
+            assertThat(person.getUpdatedAt(), equalTo(now));
+        }
+    }
+
+    @Test
+    void handles_many_writers_trying_to_update() throws SQLException {
+        int numWriters = 100;
+        Duration interval = Duration.between(yesterday, now).dividedBy(numWriters);
+        List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
+            Instant updatedAt = yesterday.plus(interval.multipliedBy(i));
+            try (Connection connection = getPostgresTestDatabaseConnection()) {
+                return upsert(connection, "j@j.com", "John", updatedAt);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        assertThat(results.size(), equalTo(numWriters));
+        long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
+        assertThat(numSuccessfulWrites, greaterThanOrEqualTo(1L));
+
+        try (Connection connection = getPostgresTestDatabaseConnection()) {
+            List<Person> allPeople = fetchAllPeople(connection);
+            assertThat(allPeople, hasSize(1));
+            Person person = allPeople.get(0);
+            assertThat(person.getEmail(), equalTo("j@j.com"));
+            assertThat(person.getName(), equalTo("John"));
+            assertThat(person.getUpdatedAt(), equalTo(now.minus(interval)));
+        }
+    }
+
+    @Test
+    void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
+        int numWriters = 100;
+        List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
+            try (Connection connection = getPostgresTestDatabaseConnection()) {
+                return upsert(connection, "j@j.com", "John", now);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        assertThat(results.size(), equalTo(numWriters));
+        long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
+        assertThat(numSuccessfulWrites, equalTo(1L));
+        long numFailedWrites = results.stream().filter(r -> r == UpsertResult.StaleData).count();
+        assertThat(numFailedWrites, equalTo(numWriters - 1L));
+
+        try (Connection connection = getPostgresTestDatabaseConnection()) {
+            List<Person> allPeople = fetchAllPeople(connection);
+            assertThat(allPeople, hasSize(1));
+            Person person = allPeople.get(0);
+            assertThat(person.getEmail(), equalTo("j@j.com"));
+            assertThat(person.getName(), equalTo("John"));
             assertThat(person.getUpdatedAt(), equalTo(now));
         }
     }
@@ -156,8 +234,12 @@ class ThreadsafeUpsertTest {
             statement.setTimestamp(2, timestamp);
             statement.setString(3, email);
             statement.setTimestamp(4, timestamp);
-            statement.execute();
-            return UpsertResult.Success;
+            int numAffectedRows = statement.executeUpdate();
+            if (numAffectedRows > 0) {
+                return UpsertResult.Success;
+            } else {
+                return UpsertResult.StaleData;
+            }
         }
     }
 
