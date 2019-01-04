@@ -8,3 +8,9 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+  mysql:
+    image: mysql:8
+    ports:
+      - "9002:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password

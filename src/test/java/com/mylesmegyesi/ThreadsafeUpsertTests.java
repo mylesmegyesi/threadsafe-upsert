@@ -74,7 +74,6 @@ public interface ThreadsafeUpsertTests {
             assertThat(person.getUpdatedAt(), equalTo(now));
         }
     }
-    ;
 
     @Test
     default void handles_many_writers_trying_to_update() throws SQLException {
@@ -102,7 +101,6 @@ public interface ThreadsafeUpsertTests {
             assertThat(person.getUpdatedAt(), equalTo(now.minus(interval)));
         }
     }
-    ;
 
     @Test
     default void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
