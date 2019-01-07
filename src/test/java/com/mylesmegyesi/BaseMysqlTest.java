@@ -28,6 +28,7 @@ public interface BaseMysqlTest extends ThreadsafeUpsertTests {
         props.setProperty("user", "root");
         props.setProperty("password", "password");
         props.setProperty("useSSL", "false");
+        props.setProperty("allowPublicKeyRetrieval", "true");
 
         // This is necessary to make the affected-row count for ON DUPLICATE KEY UPDATE work correctly
         // https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-configuration-properties.html
