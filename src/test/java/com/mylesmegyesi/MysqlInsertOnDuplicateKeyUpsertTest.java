@@ -6,14 +6,14 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 
-class MySqlInsertOnDuplicateKeyUpsertTest implements BaseMysqlTest {
+class MySqlInsertOnDuplicateKeyUpsertTest extends BaseMysqlTest {
     private static final String MYSQL_UPSERT = "INSERT INTO people (email, name, created_at, updated_at) VALUES (?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE " +
             "name = IF(VALUES(updated_at) > people.updated_at, VALUES(name), name), " +
             "updated_at = IF(VALUES(updated_at) > people.updated_at, VALUES(updated_at), updated_at) ";
 
     @Override
-    public UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+    UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(MYSQL_UPSERT)) {
             Timestamp timestamp = Timestamp.from(updatedAt);
 

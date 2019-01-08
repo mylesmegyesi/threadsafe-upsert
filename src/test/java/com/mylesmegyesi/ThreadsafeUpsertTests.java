@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -17,15 +18,16 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 
-public interface ThreadsafeUpsertTests {
-    Instant now = Instant.now();
-    Instant yesterday = now.minus(Duration.ofDays(1));
+abstract class ThreadsafeUpsertTests<T> {
+    private static final Instant now = Instant.now();
+    private static final Instant yesterday = now.minus(Duration.ofDays(1));
+    private T database;
 
     @BeforeEach
-    default void before() throws SQLException {
-        createTestDatabase();
+    void before() throws SQLException, IOException {
+        database = createTestDatabase();
 
-        try (Connection testDatabaseConnection = getTestDatabaseConnection()) {
+        try (Connection testDatabaseConnection = getTestDatabaseConnection(database)) {
             try (Statement createTableStatement = testDatabaseConnection.createStatement()) {
                 createTableStatement.executeUpdate(getCreateTableSql());
             }
@@ -33,13 +35,17 @@ public interface ThreadsafeUpsertTests {
     }
 
     @AfterEach
-    default void after() throws SQLException {
-        dropTestDatabase();
+    void after() throws SQLException {
+        try {
+            dropTestDatabase(database);
+        } finally {
+            database = null;
+        }
     }
 
     @Test
-    default void creates_a_person_if_they_do_not_exist() throws SQLException {
-        try (Connection connection = getTestDatabaseConnection()) {
+    void creates_a_person_if_they_do_not_exist() throws SQLException {
+        try (Connection connection = getTestDatabaseConnection(database)) {
             UpsertResult result = upsert(connection, "j@j.com", "John", yesterday);
             assertThat(result, equalTo(UpsertResult.Success));
 
@@ -49,14 +55,14 @@ public interface ThreadsafeUpsertTests {
             Person person = allPeople.get(0);
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("John"));
-            assertThat(person.getCreatedAt(), equalTo(yesterday));
-            assertThat(person.getUpdatedAt(), equalTo(yesterday));
+            assertThat(person.getCreatedAt().toEpochMilli(), equalTo(yesterday.toEpochMilli()));
+            assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(yesterday.toEpochMilli()));
         }
     }
 
     @Test
-    default void updates_the_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
-        try (Connection connection = getTestDatabaseConnection()) {
+    void updates_the_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
+        try (Connection connection = getTestDatabaseConnection(database)) {
             Instant updatedAt = now.minus(Duration.ofDays(1));
             UpsertResult firstUpsertResult = upsert(connection, "j@j.com", "John", updatedAt);
             assertThat(firstUpsertResult, equalTo(UpsertResult.Success));
@@ -70,18 +76,18 @@ public interface ThreadsafeUpsertTests {
             Person person = allPeople.get(0);
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("Johnathon"));
-            assertThat(person.getCreatedAt(), equalTo(updatedAt));
-            assertThat(person.getUpdatedAt(), equalTo(now));
+            assertThat(person.getCreatedAt().toEpochMilli(), equalTo(updatedAt.toEpochMilli()));
+            assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.toEpochMilli()));
         }
     }
 
     @Test
-    default void handles_many_writers_trying_to_update() throws SQLException {
+    void handles_many_writers_trying_to_update() throws SQLException {
         int numWriters = 100;
         Duration interval = Duration.between(yesterday, now).dividedBy(numWriters);
         List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
             Instant updatedAt = yesterday.plus(interval.multipliedBy(i));
-            try (Connection connection = getTestDatabaseConnection()) {
+            try (Connection connection = getTestDatabaseConnection(database)) {
                 return upsert(connection, "j@j.com", "John", updatedAt);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
@@ -92,21 +98,21 @@ public interface ThreadsafeUpsertTests {
         long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
         assertThat(numSuccessfulWrites, greaterThanOrEqualTo(1L));
 
-        try (Connection connection = getTestDatabaseConnection()) {
+        try (Connection connection = getTestDatabaseConnection(database)) {
             List<Person> allPeople = fetchAllPeople(connection);
             assertThat(allPeople, hasSize(1));
             Person person = allPeople.get(0);
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("John"));
-            assertThat(person.getUpdatedAt(), equalTo(now.minus(interval)));
+            assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.minus(interval).toEpochMilli()));
         }
     }
 
     @Test
-    default void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
+    void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
         int numWriters = 100;
         List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
-            try (Connection connection = getTestDatabaseConnection()) {
+            try (Connection connection = getTestDatabaseConnection(database)) {
                 return upsert(connection, "j@j.com", "John", now);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
@@ -119,20 +125,20 @@ public interface ThreadsafeUpsertTests {
         long numFailedWrites = results.stream().filter(r -> r == UpsertResult.StaleData).count();
         assertThat(numFailedWrites, equalTo(numWriters - 1L));
 
-        try (Connection connection = getTestDatabaseConnection()) {
+        try (Connection connection = getTestDatabaseConnection(database)) {
             List<Person> allPeople = fetchAllPeople(connection);
             assertThat(allPeople, hasSize(1));
             Person person = allPeople.get(0);
             assertThat(person.getEmail(), equalTo("j@j.com"));
             assertThat(person.getName(), equalTo("John"));
-            assertThat(person.getUpdatedAt(), equalTo(now));
+            assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.toEpochMilli()));
         }
     }
 
-    void createTestDatabase() throws SQLException;
-    void dropTestDatabase() throws SQLException;
-    String getCreateTableSql();
-    Connection getTestDatabaseConnection() throws SQLException;
-    UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException;
-    List<Person> fetchAllPeople(Connection connection) throws SQLException;
+    abstract T createTestDatabase() throws SQLException, IOException;
+    abstract void dropTestDatabase(T database) throws SQLException;
+    abstract String getCreateTableSql();
+    abstract Connection getTestDatabaseConnection(T database) throws SQLException;
+    abstract UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException;
+    abstract List<Person> fetchAllPeople(Connection connection) throws SQLException;
 }

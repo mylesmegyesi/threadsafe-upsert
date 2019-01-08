@@ -10,14 +10,14 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-class PostgresTwoStepUpsertTest implements BasePostgresTest, TwoStepUpsert.TwoStepUpsertStrategy {
+class PostgresTwoStepUpsertTest extends BasePostgresTest implements TwoStepUpsert.TwoStepUpsertStrategy {
     private static final String POSTGRES_INSERT = "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)";
     private static final String POSTGRES_UPDATE = "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
     private static final Pattern POSTGRES_DUPLICATE_EMAIL_PATTERN = Pattern
             .compile(".*duplicate key value violates unique constraint \"people_email_key\".*", Pattern.DOTALL);
 
     @Override
-    public UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+    UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
         return TwoStepUpsert.upsert(this, connection, email, name, updatedAt);
     }
 

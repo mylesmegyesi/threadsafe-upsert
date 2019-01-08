@@ -8,14 +8,14 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.regex.Pattern;
 
-class MySqlTwoStepUpsertTest implements BaseMysqlTest, TwoStepUpsert.TwoStepUpsertStrategy {
+class MySqlTwoStepUpsertTest extends BaseMysqlTest implements TwoStepUpsert.TwoStepUpsertStrategy {
     private static final String MYSQL_INSERT = "INSERT INTO people (email, name, created_at, updated_at) VALUES (?, ?, ?, ?)";
     private static final String MYSQL_UPDATE = "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
     private static final Pattern MYSQL_DUPLICATE_EMAIL_PATTERN = Pattern
             .compile("^Duplicate entry '.*' for key 'email'$");
 
     @Override
-    public UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+    UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
         return TwoStepUpsert.upsert(this, connection, email, name, updatedAt);
     }
 

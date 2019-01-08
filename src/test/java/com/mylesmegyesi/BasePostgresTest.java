@@ -11,25 +11,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-public interface BasePostgresTest extends ThreadsafeUpsertTests {
-    String POSTGRES_USERNAME = "postgres";
-    String POSTGRES_PASSWORD = "postgres";
-    String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
-    String POSTGRES_CREATE_TABLE = "CREATE TABLE people (" +
+abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
+    private static final String POSTGRES_USERNAME = "postgres";
+    private static final String POSTGRES_PASSWORD = "postgres";
+    private static final String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
+    private static final String POSTGRES_CREATE_TABLE = "CREATE TABLE people (" +
             "id uuid PRIMARY KEY, " +
             "name varchar(255) NOT NULL, " +
             "email varchar(255) UNIQUE NOT NULL, " +
             "created_at timestamp with time zone, " +
             "updated_at timestamp with time zone" +
             ")";
-    Properties props = getPostgresProperties();
-    String POSTGRES_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
+    private static final Properties props = getPostgresProperties();
+    private static final String POSTGRES_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
 
-    static Connection getMasterDatabaseConnection() throws SQLException {
+    private static Connection getMasterDatabaseConnection() throws SQLException {
         return DriverManager.getConnection("jdbc:postgresql://localhost:9001/postgres", props);
     }
 
-    static Properties getPostgresProperties() {
+    private static Properties getPostgresProperties() {
         Properties props = new Properties();
         props.setProperty("user", POSTGRES_USERNAME);
         props.setProperty("password", POSTGRES_PASSWORD);
@@ -42,26 +42,27 @@ public interface BasePostgresTest extends ThreadsafeUpsertTests {
     }
 
     @Override
-    default void createTestDatabase() throws SQLException {
+    Void createTestDatabase() throws SQLException {
         try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
             try (Statement createDatabaseStatement = masterDatabaseConnection.createStatement()) {
                 createDatabaseStatement.executeUpdate("CREATE DATABASE " + POSTGRES_DATABASE_NAME);
             }
         }
+        return null;
     }
 
     @Override
-    default String getCreateTableSql() {
+    String getCreateTableSql() {
         return POSTGRES_CREATE_TABLE;
     }
 
     @Override
-    default Connection getTestDatabaseConnection() throws SQLException {
+    Connection getTestDatabaseConnection(Void database) throws SQLException {
         return DriverManager.getConnection("jdbc:postgresql://localhost:9001/" + POSTGRES_DATABASE_NAME, props);
     }
 
     @Override
-    default void dropTestDatabase() throws SQLException {
+    void dropTestDatabase(Void database) throws SQLException {
         try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
             try (Statement dropDatabaseStatement = masterDatabaseConnection.createStatement()) {
                 dropDatabaseStatement.executeUpdate("DROP DATABASE " + POSTGRES_DATABASE_NAME);
@@ -70,7 +71,7 @@ public interface BasePostgresTest extends ThreadsafeUpsertTests {
     }
 
     @Override
-    default List<Person> fetchAllPeople(Connection connection) throws SQLException {
+    List<Person> fetchAllPeople(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             ResultSet resultSet = statement.executeQuery(POSTGRES_SELECT_ALL_PEOPLE_QUERY);
             List<Person> people = new ArrayList<>();
