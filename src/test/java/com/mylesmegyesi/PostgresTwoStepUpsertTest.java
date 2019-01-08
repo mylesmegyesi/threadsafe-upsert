@@ -10,18 +10,28 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-class PostgresTwoStepUpsertTest extends BasePostgresTest implements TwoStepUpsert.TwoStepUpsertStrategy {
-  private static final String POSTGRES_INSERT = "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)";
-  private static final String POSTGRES_UPDATE = "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
-  private static final Pattern POSTGRES_DUPLICATE_EMAIL_PATTERN = Pattern
-      .compile(".*duplicate key value violates unique constraint \"people_email_key\".*", Pattern.DOTALL);
+class PostgresTwoStepUpsertTest extends BasePostgresTest
+    implements TwoStepUpsert.TwoStepUpsertStrategy {
+
+  private static final String POSTGRES_INSERT =
+      "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)";
+
+  private static final String POSTGRES_UPDATE =
+      "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
+
+  private static final Pattern POSTGRES_DUPLICATE_EMAIL_PATTERN =
+      Pattern.compile(
+          ".*duplicate key value violates unique constraint \"people_email_key\".*",
+          Pattern.DOTALL);
 
   @Override
-  UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+  UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt)
+      throws SQLException {
     return TwoStepUpsert.upsert(this, connection, email, name, updatedAt);
   }
 
-  public boolean insert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+  public boolean insert(Connection connection, String email, String name, Instant updatedAt)
+      throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(POSTGRES_INSERT)) {
       statement.setObject(1, UUID.randomUUID());
       statement.setString(2, email);
@@ -32,17 +42,18 @@ class PostgresTwoStepUpsertTest extends BasePostgresTest implements TwoStepUpser
       try {
         statement.execute();
         return true;
-      } catch (PSQLException e) {
-        if (isDuplicateEmailError(e)) {
+      } catch (PSQLException exception) {
+        if (isDuplicateEmailError(exception)) {
           return false;
         }
 
-        throw e;
+        throw exception;
       }
     }
   }
 
-  public UpsertResult update(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+  public UpsertResult update(Connection connection, String email, String name, Instant updatedAt)
+      throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(POSTGRES_UPDATE)) {
       statement.setString(1, name);
       Timestamp timestamp = Timestamp.from(updatedAt);
@@ -58,7 +69,7 @@ class PostgresTwoStepUpsertTest extends BasePostgresTest implements TwoStepUpser
     }
   }
 
-  private boolean isDuplicateEmailError(PSQLException e) {
-    return POSTGRES_DUPLICATE_EMAIL_PATTERN.matcher(e.getMessage()).matches();
+  private boolean isDuplicateEmailError(PSQLException exception) {
+    return POSTGRES_DUPLICATE_EMAIL_PATTERN.matcher(exception.getMessage()).matches();
   }
 }

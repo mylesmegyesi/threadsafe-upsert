@@ -1,19 +1,25 @@
 package com.mylesmegyesi;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
+
   private static final String MYSQL_DATABASE_NAME = "threadsafe_upsert_test";
-  private static final String MYSQL_CREATE_TABLE = "CREATE TABLE people (" +
-      "id serial, " +
-      "name varchar(255) NOT NULL, " +
-      "email varchar(255) UNIQUE NOT NULL, " +
-      "created_at timestamp(6), " +
-      "updated_at timestamp(6)" +
-      ")";
+  private static final String MYSQL_CREATE_TABLE =
+      "CREATE TABLE people ("
+          + "id serial, "
+          + "name varchar(255) NOT NULL, "
+          + "email varchar(255) UNIQUE NOT NULL, "
+          + "created_at timestamp(6), "
+          + "updated_at timestamp(6)"
+          + ")";
   private static final String MYSQL_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
   private static final Properties MYSQL_PROPERTIES = getMysqlProperties();
 
@@ -60,7 +66,8 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   Connection getTestDatabaseConnection(Void database) throws SQLException {
-    return DriverManager.getConnection("jdbc:mysql://localhost:9002/" + MYSQL_DATABASE_NAME, MYSQL_PROPERTIES);
+    return DriverManager.getConnection(
+        "jdbc:mysql://localhost:9002/" + MYSQL_DATABASE_NAME, MYSQL_PROPERTIES);
   }
 
   @Override
@@ -69,12 +76,12 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
       ResultSet resultSet = statement.executeQuery(MYSQL_SELECT_ALL_PEOPLE_QUERY);
       List<Person> people = new ArrayList<>();
       while (resultSet.next()) {
-        people.add(new Person(
-            resultSet.getString("email"),
-            resultSet.getString("name"),
-            resultSet.getTimestamp("created_at").toInstant(),
-            resultSet.getTimestamp("updated_at").toInstant()
-        ));
+        people.add(
+            new Person(
+                resultSet.getString("email"),
+                resultSet.getString("name"),
+                resultSet.getTimestamp("created_at").toInstant(),
+                resultSet.getTimestamp("updated_at").toInstant()));
       }
       return people;
     }

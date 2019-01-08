@@ -2,22 +2,28 @@ package com.mylesmegyesi;
 
 import org.junit.jupiter.api.BeforeAll;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
 abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
+
   private static final String POSTGRES_USERNAME = "postgres";
   private static final String POSTGRES_PASSWORD = "postgres";
   private static final String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
-  private static final String POSTGRES_CREATE_TABLE = "CREATE TABLE people (" +
-      "id uuid PRIMARY KEY, " +
-      "name varchar(255) NOT NULL, " +
-      "email varchar(255) UNIQUE NOT NULL, " +
-      "created_at timestamp with time zone, " +
-      "updated_at timestamp with time zone" +
-      ")";
+  private static final String POSTGRES_CREATE_TABLE =
+      "CREATE TABLE people ("
+          + "id uuid PRIMARY KEY, "
+          + "name varchar(255) NOT NULL, "
+          + "email varchar(255) UNIQUE NOT NULL, "
+          + "created_at timestamp with time zone, "
+          + "updated_at timestamp with time zone"
+          + ")";
   private static final Properties props = getPostgresProperties();
   private static final String POSTGRES_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
 
@@ -54,7 +60,8 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   Connection getTestDatabaseConnection(Void database) throws SQLException {
-    return DriverManager.getConnection("jdbc:postgresql://localhost:9001/" + POSTGRES_DATABASE_NAME, props);
+    return DriverManager.getConnection(
+        "jdbc:postgresql://localhost:9001/" + POSTGRES_DATABASE_NAME, props);
   }
 
   @Override
@@ -72,12 +79,12 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
       ResultSet resultSet = statement.executeQuery(POSTGRES_SELECT_ALL_PEOPLE_QUERY);
       List<Person> people = new ArrayList<>();
       while (resultSet.next()) {
-        people.add(new Person(
-            resultSet.getString("email"),
-            resultSet.getString("name"),
-            resultSet.getTimestamp("created_at").toInstant(),
-            resultSet.getTimestamp("updated_at").toInstant()
-        ));
+        people.add(
+            new Person(
+                resultSet.getString("email"),
+                resultSet.getString("name"),
+                resultSet.getTimestamp("created_at").toInstant(),
+                resultSet.getTimestamp("updated_at").toInstant()));
       }
       return people;
     }

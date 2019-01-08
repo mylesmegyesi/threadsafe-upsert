@@ -1,5 +1,11 @@
 package com.mylesmegyesi;
 
+import static com.mylesmegyesi.ConcurrencyUtils.executeNTimesInParallel;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,11 +18,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
-import static com.mylesmegyesi.ConcurrencyUtils.executeNTimesInParallel;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
-
 abstract class ThreadsafeUpsertTests<T> {
+
   private static final Instant now = Instant.now();
   private static final Instant yesterday = now.minus(Duration.ofDays(1));
   private T database;
@@ -83,14 +86,18 @@ abstract class ThreadsafeUpsertTests<T> {
   void handles_many_writers_trying_to_update() throws SQLException {
     int numWriters = 100;
     Duration interval = Duration.between(yesterday, now).dividedBy(numWriters);
-    List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
-      Instant updatedAt = yesterday.plus(interval.multipliedBy(i));
-      try (Connection connection = getTestDatabaseConnection(database)) {
-        return upsert(connection, "j@j.com", "John", updatedAt);
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
-      }
-    });
+    List<UpsertResult> results =
+        executeNTimesInParallel(
+            8,
+            numWriters,
+            (index) -> {
+              Instant updatedAt = yesterday.plus(interval.multipliedBy(index));
+              try (Connection connection = getTestDatabaseConnection(database)) {
+                return upsert(connection, "j@j.com", "John", updatedAt);
+              } catch (SQLException exception) {
+                throw new RuntimeException(exception);
+              }
+            });
 
     assertThat(results.size(), equalTo(numWriters));
     long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
@@ -109,13 +116,17 @@ abstract class ThreadsafeUpsertTests<T> {
   @Test
   void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
     int numWriters = 100;
-    List<UpsertResult> results = executeNTimesInParallel(8, numWriters, (i) -> {
-      try (Connection connection = getTestDatabaseConnection(database)) {
-        return upsert(connection, "j@j.com", "John", now);
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
-      }
-    });
+    List<UpsertResult> results =
+        executeNTimesInParallel(
+            8,
+            numWriters,
+            (index) -> {
+              try (Connection connection = getTestDatabaseConnection(database)) {
+                return upsert(connection, "j@j.com", "John", now);
+              } catch (SQLException exception) {
+                throw new RuntimeException(exception);
+              }
+            });
 
     assertThat(results.size(), equalTo(numWriters));
     long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
@@ -141,7 +152,8 @@ abstract class ThreadsafeUpsertTests<T> {
 
   abstract Connection getTestDatabaseConnection(T database) throws SQLException;
 
-  abstract UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException;
+  abstract UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt)
+      throws SQLException;
 
   abstract List<Person> fetchAllPeople(Connection connection) throws SQLException;
 }

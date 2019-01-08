@@ -3,6 +3,7 @@ package com.mylesmegyesi;
 import java.time.Instant;
 
 class Person {
+
   private final String email;
   private final String name;
   private final Instant createdAt;

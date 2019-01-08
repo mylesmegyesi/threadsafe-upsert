@@ -8,11 +8,16 @@ import java.time.Instant;
 import java.util.UUID;
 
 class PostgresInsertOnConflictUpsertTest extends BasePostgresTest {
-  private static final String POSTGRES_UPSERT = "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?) " +
-      "ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at WHERE EXCLUDED.updated_at > people.updated_at";
+
+  private static final String POSTGRES_UPSERT =
+      "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?) "
+          + "ON CONFLICT (email) "
+          + "DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at "
+          + "WHERE EXCLUDED.updated_at > people.updated_at";
 
   @Override
-  UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt) throws SQLException {
+  UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt)
+      throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(POSTGRES_UPSERT)) {
       Timestamp timestamp = Timestamp.from(updatedAt);
 
