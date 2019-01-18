@@ -7,14 +7,13 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 class PostgresTwoStepUpsertTest extends BasePostgresTest
     implements TwoStepUpsert.TwoStepUpsertStrategy {
 
   private static final String POSTGRES_INSERT =
-      "INSERT INTO people (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)";
+      "INSERT INTO people (email, name, created_at, updated_at) VALUES (?, ?, ?, ?)";
 
   private static final String POSTGRES_UPDATE =
       "UPDATE people SET name = ?, updated_at = ? WHERE email = ? AND updated_at < ?";
@@ -33,12 +32,12 @@ class PostgresTwoStepUpsertTest extends BasePostgresTest
   public boolean insert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(POSTGRES_INSERT)) {
-      statement.setObject(1, UUID.randomUUID());
-      statement.setString(2, email);
-      statement.setString(3, name);
       Timestamp timestamp = Timestamp.from(updatedAt);
+
+      statement.setString(1, email);
+      statement.setString(2, name);
+      statement.setTimestamp(3, timestamp);
       statement.setTimestamp(4, timestamp);
-      statement.setTimestamp(5, timestamp);
       try {
         statement.execute();
         return true;

@@ -18,7 +18,6 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
   private static final String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
   private static final String POSTGRES_CREATE_TABLE =
       "CREATE TABLE people ("
-          + "id uuid PRIMARY KEY, "
           + "name varchar(255) NOT NULL, "
           + "email varchar(255) UNIQUE NOT NULL, "
           + "created_at timestamp with time zone, "

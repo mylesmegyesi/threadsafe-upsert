@@ -14,7 +14,6 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
   private static final String MYSQL_DATABASE_NAME = "threadsafe_upsert_test";
   private static final String MYSQL_CREATE_TABLE =
       "CREATE TABLE people ("
-          + "id serial, "
           + "name varchar(255) NOT NULL, "
           + "email varchar(255) UNIQUE NOT NULL, "
           + "created_at timestamp(6), "
