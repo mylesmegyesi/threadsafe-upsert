@@ -12,24 +12,25 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 abstract class ThreadsafeUpsertTests<T> {
-
-  private static final Instant now = Instant.now();
-  private static final Instant yesterday = now.minus(Duration.ofDays(1));
+  private static final Instant NOW = Instant.now();
+  private static final Instant YESTERDAY = NOW.minus(Duration.ofDays(1));
+  private static final String SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
   private T database;
 
   @BeforeEach
   void before() throws SQLException, IOException {
     database = createTestDatabase();
 
-    try (Connection testDatabaseConnection = getTestDatabaseConnection(database)) {
-      try (Statement createTableStatement = testDatabaseConnection.createStatement()) {
+    try (var testDatabaseConnection = getTestDatabaseConnection(database)) {
+      try (var createTableStatement = testDatabaseConnection.createStatement()) {
         createTableStatement.executeUpdate(getCreateTableSql());
       }
     }
@@ -46,52 +47,52 @@ abstract class ThreadsafeUpsertTests<T> {
 
   @Test
   void creates_a_person_if_they_do_not_exist() throws SQLException {
-    try (Connection connection = getTestDatabaseConnection(database)) {
-      UpsertResult result = upsert(connection, "j@j.com", "John", yesterday);
+    try (var connection = getTestDatabaseConnection(database)) {
+      var result = upsert(connection, "j@j.com", "John", YESTERDAY);
       assertThat(result, equalTo(UpsertResult.Success));
 
-      List<Person> allPeople = fetchAllPeople(connection);
+      var allPeople = fetchAllPeople(connection);
 
       assertThat(allPeople, hasSize(1));
-      Person person = allPeople.get(0);
-      assertThat(person.getEmail(), equalTo("j@j.com"));
-      assertThat(person.getName(), equalTo("John"));
-      assertThat(person.getCreatedAt().toEpochMilli(), equalTo(yesterday.toEpochMilli()));
-      assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(yesterday.toEpochMilli()));
+      var person = allPeople.get(0);
+      assertThat(person.email, equalTo("j@j.com"));
+      assertThat(person.name, equalTo("John"));
+      assertThat(person.createdAt.toEpochMilli(), equalTo(YESTERDAY.toEpochMilli()));
+      assertThat(person.updatedAt.toEpochMilli(), equalTo(YESTERDAY.toEpochMilli()));
     }
   }
 
   @Test
   void updates_the_name_and_updatedAt_timestamp_if_the_email_already_exists() throws SQLException {
-    try (Connection connection = getTestDatabaseConnection(database)) {
-      Instant updatedAt = now.minus(Duration.ofDays(1));
-      UpsertResult firstUpsertResult = upsert(connection, "j@j.com", "John", updatedAt);
+    try (var connection = getTestDatabaseConnection(database)) {
+      var updatedAt = NOW.minus(Duration.ofDays(1));
+      var firstUpsertResult = upsert(connection, "j@j.com", "John", updatedAt);
       assertThat(firstUpsertResult, equalTo(UpsertResult.Success));
 
-      UpsertResult secondUpsertResult = upsert(connection, "j@j.com", "Johnathon", now);
+      var secondUpsertResult = upsert(connection, "j@j.com", "Johnathon", NOW);
       assertThat(secondUpsertResult, equalTo(UpsertResult.Success));
 
-      List<Person> allPeople = fetchAllPeople(connection);
+      var allPeople = fetchAllPeople(connection);
 
       assertThat(allPeople, hasSize(1));
-      Person person = allPeople.get(0);
-      assertThat(person.getEmail(), equalTo("j@j.com"));
-      assertThat(person.getName(), equalTo("Johnathon"));
-      assertThat(person.getCreatedAt().toEpochMilli(), equalTo(updatedAt.toEpochMilli()));
-      assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.toEpochMilli()));
+      var person = allPeople.get(0);
+      assertThat(person.email, equalTo("j@j.com"));
+      assertThat(person.name, equalTo("Johnathon"));
+      assertThat(person.createdAt.toEpochMilli(), equalTo(updatedAt.toEpochMilli()));
+      assertThat(person.updatedAt.toEpochMilli(), equalTo(NOW.toEpochMilli()));
     }
   }
 
   @Test
   void handles_many_writers_trying_to_update() throws SQLException {
-    int numWriters = 100;
-    Duration interval = Duration.between(yesterday, now).dividedBy(numWriters);
-    List<UpsertResult> results =
+    var numWriters = 100;
+    var interval = Duration.between(YESTERDAY, NOW).dividedBy(numWriters);
+    var results =
         executeNTimesInParallel(
             8,
             numWriters,
             (index) -> {
-              Instant updatedAt = yesterday.plus(interval.multipliedBy(index));
+              Instant updatedAt = YESTERDAY.plus(interval.multipliedBy(index));
               try (Connection connection = getTestDatabaseConnection(database)) {
                 return upsert(connection, "j@j.com", "John", updatedAt);
               } catch (SQLException exception) {
@@ -100,47 +101,63 @@ abstract class ThreadsafeUpsertTests<T> {
             });
 
     assertThat(results.size(), equalTo(numWriters));
-    long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
+    var numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
     assertThat(numSuccessfulWrites, greaterThanOrEqualTo(1L));
 
-    try (Connection connection = getTestDatabaseConnection(database)) {
-      List<Person> allPeople = fetchAllPeople(connection);
+    try (var connection = getTestDatabaseConnection(database)) {
+      var allPeople = fetchAllPeople(connection);
       assertThat(allPeople, hasSize(1));
-      Person person = allPeople.get(0);
-      assertThat(person.getEmail(), equalTo("j@j.com"));
-      assertThat(person.getName(), equalTo("John"));
-      assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.minus(interval).toEpochMilli()));
+      var person = allPeople.get(0);
+      assertThat(person.email, equalTo("j@j.com"));
+      assertThat(person.name, equalTo("John"));
+      assertThat(person.updatedAt.toEpochMilli(), equalTo(NOW.minus(interval).toEpochMilli()));
     }
   }
 
   @Test
   void handles_many_writers_trying_to_update_the_same_piece_of_data() throws SQLException {
-    int numWriters = 100;
-    List<UpsertResult> results =
+    var numWriters = 100;
+    var results =
         executeNTimesInParallel(
             8,
             numWriters,
             (index) -> {
               try (Connection connection = getTestDatabaseConnection(database)) {
-                return upsert(connection, "j@j.com", "John", now);
+                return upsert(connection, "j@j.com", "John", NOW);
               } catch (SQLException exception) {
                 throw new RuntimeException(exception);
               }
             });
 
     assertThat(results.size(), equalTo(numWriters));
-    long numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
+    var numSuccessfulWrites = results.stream().filter(r -> r == UpsertResult.Success).count();
     assertThat(numSuccessfulWrites, equalTo(1L));
-    long numFailedWrites = results.stream().filter(r -> r == UpsertResult.StaleData).count();
+    var numFailedWrites = results.stream().filter(r -> r == UpsertResult.StaleData).count();
     assertThat(numFailedWrites, equalTo(numWriters - 1L));
 
-    try (Connection connection = getTestDatabaseConnection(database)) {
-      List<Person> allPeople = fetchAllPeople(connection);
+    try (var connection = getTestDatabaseConnection(database)) {
+      var allPeople = fetchAllPeople(connection);
       assertThat(allPeople, hasSize(1));
-      Person person = allPeople.get(0);
-      assertThat(person.getEmail(), equalTo("j@j.com"));
-      assertThat(person.getName(), equalTo("John"));
-      assertThat(person.getUpdatedAt().toEpochMilli(), equalTo(now.toEpochMilli()));
+      var person = allPeople.get(0);
+      assertThat(person.email, equalTo("j@j.com"));
+      assertThat(person.name, equalTo("John"));
+      assertThat(person.updatedAt.toEpochMilli(), equalTo(NOW.toEpochMilli()));
+    }
+  }
+
+  private List<Person> fetchAllPeople(Connection connection) throws SQLException {
+    try (var statement = connection.createStatement()) {
+      var resultSet = statement.executeQuery(SELECT_ALL_PEOPLE_QUERY);
+      var people = new ArrayList<Person>();
+      while (resultSet.next()) {
+        people.add(
+            new Person(
+                resultSet.getString("email"),
+                resultSet.getString("name"),
+                getTimestamp(resultSet, "created_at"),
+                getTimestamp(resultSet, "updated_at")));
+      }
+      return people;
     }
   }
 
@@ -155,5 +172,5 @@ abstract class ThreadsafeUpsertTests<T> {
   abstract UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException;
 
-  abstract List<Person> fetchAllPeople(Connection connection) throws SQLException;
+  abstract Instant getTimestamp(ResultSet resultSet, String columnLabel) throws SQLException;
 }

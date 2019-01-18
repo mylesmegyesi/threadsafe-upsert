@@ -3,7 +3,6 @@ package com.mylesmegyesi;
 import org.postgresql.util.PSQLException;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -31,8 +30,8 @@ class PostgresTwoStepUpsertTest extends BasePostgresTest
 
   public boolean insert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(POSTGRES_INSERT)) {
-      Timestamp timestamp = Timestamp.from(updatedAt);
+    try (var statement = connection.prepareStatement(POSTGRES_INSERT)) {
+      var timestamp = Timestamp.from(updatedAt);
 
       statement.setString(1, email);
       statement.setString(2, name);
@@ -53,13 +52,13 @@ class PostgresTwoStepUpsertTest extends BasePostgresTest
 
   public UpsertResult update(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(POSTGRES_UPDATE)) {
+    try (var statement = connection.prepareStatement(POSTGRES_UPDATE)) {
       statement.setString(1, name);
-      Timestamp timestamp = Timestamp.from(updatedAt);
+      var timestamp = Timestamp.from(updatedAt);
       statement.setTimestamp(2, timestamp);
       statement.setString(3, email);
       statement.setTimestamp(4, timestamp);
-      int numAffectedRows = statement.executeUpdate();
+      var numAffectedRows = statement.executeUpdate();
       if (numAffectedRows > 0) {
         return UpsertResult.Success;
       } else {

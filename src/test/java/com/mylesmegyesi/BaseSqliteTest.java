@@ -6,13 +6,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 abstract class BaseSqliteTest extends ThreadsafeUpsertTests<File> {
-
   private static final String SQLITE_CREATE_TABLE =
       "CREATE TABLE people ("
           + "name text NOT NULL, "
@@ -20,7 +16,6 @@ abstract class BaseSqliteTest extends ThreadsafeUpsertTests<File> {
           + "created_at integer, "
           + "updated_at integer"
           + ")";
-  private static final String SQLITE_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
 
   @Override
   File createTestDatabase() throws IOException {
@@ -43,19 +38,7 @@ abstract class BaseSqliteTest extends ThreadsafeUpsertTests<File> {
   }
 
   @Override
-  List<Person> fetchAllPeople(Connection connection) throws SQLException {
-    try (Statement statement = connection.createStatement()) {
-      ResultSet resultSet = statement.executeQuery(SQLITE_SELECT_ALL_PEOPLE_QUERY);
-      List<Person> people = new ArrayList<>();
-      while (resultSet.next()) {
-        people.add(
-            new Person(
-                resultSet.getString("email"),
-                resultSet.getString("name"),
-                Instant.ofEpochMilli(resultSet.getLong("created_at")),
-                Instant.ofEpochMilli(resultSet.getLong("updated_at"))));
-      }
-      return people;
-    }
+  Instant getTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
+    return Instant.ofEpochMilli(resultSet.getLong(columnLabel));
   }
 }

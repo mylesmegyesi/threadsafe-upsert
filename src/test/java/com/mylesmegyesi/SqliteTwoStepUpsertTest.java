@@ -3,7 +3,6 @@ package com.mylesmegyesi;
 import org.sqlite.SQLiteException;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.regex.Pattern;
@@ -28,8 +27,8 @@ class SqliteTwoStepUpsertTest extends BaseSqliteTest
 
   public boolean insert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(SQLITE_INSERT)) {
-      long timestamp = updatedAt.toEpochMilli();
+    try (var statement = connection.prepareStatement(SQLITE_INSERT)) {
+      var timestamp = updatedAt.toEpochMilli();
       statement.setString(1, email);
       statement.setString(2, name);
       statement.setLong(3, timestamp);
@@ -49,13 +48,13 @@ class SqliteTwoStepUpsertTest extends BaseSqliteTest
 
   public UpsertResult update(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(SQLITE_UPDATE)) {
+    try (var statement = connection.prepareStatement(SQLITE_UPDATE)) {
       statement.setString(1, name);
-      long timestamp = updatedAt.toEpochMilli();
+      var timestamp = updatedAt.toEpochMilli();
       statement.setLong(2, timestamp);
       statement.setString(3, email);
       statement.setLong(4, timestamp);
-      int numAffectedRows = statement.executeUpdate();
+      var numAffectedRows = statement.executeUpdate();
       if (numAffectedRows > 0) {
         return UpsertResult.Success;
       } else {

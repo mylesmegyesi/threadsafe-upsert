@@ -4,13 +4,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Instant;
 import java.util.Properties;
 
 abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
-
   private static final String MYSQL_DATABASE_NAME = "threadsafe_upsert_test";
   private static final String MYSQL_CREATE_TABLE =
       "CREATE TABLE people ("
@@ -19,7 +16,6 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
           + "created_at timestamp(6), "
           + "updated_at timestamp(6)"
           + ")";
-  private static final String MYSQL_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
   private static final Properties MYSQL_PROPERTIES = getMysqlProperties();
 
   private static Connection getMasterDatabaseConnection() throws SQLException {
@@ -27,7 +23,7 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
   }
 
   private static Properties getMysqlProperties() {
-    Properties props = new Properties();
+    var props = new Properties();
     props.setProperty("user", "root");
     props.setProperty("password", "password");
     props.setProperty("useSSL", "false");
@@ -41,8 +37,8 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   Void createTestDatabase() throws SQLException {
-    try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
-      try (Statement createDatabaseStatement = masterDatabaseConnection.createStatement()) {
+    try (var masterDatabaseConnection = getMasterDatabaseConnection()) {
+      try (var createDatabaseStatement = masterDatabaseConnection.createStatement()) {
         createDatabaseStatement.executeUpdate("CREATE DATABASE " + MYSQL_DATABASE_NAME);
       }
     }
@@ -51,8 +47,8 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   void dropTestDatabase(Void database) throws SQLException {
-    try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
-      try (Statement dropDatabaseStatement = masterDatabaseConnection.createStatement()) {
+    try (var masterDatabaseConnection = getMasterDatabaseConnection()) {
+      try (var dropDatabaseStatement = masterDatabaseConnection.createStatement()) {
         dropDatabaseStatement.executeUpdate("DROP DATABASE " + MYSQL_DATABASE_NAME);
       }
     }
@@ -70,19 +66,7 @@ abstract class BaseMysqlTest extends ThreadsafeUpsertTests<Void> {
   }
 
   @Override
-  List<Person> fetchAllPeople(Connection connection) throws SQLException {
-    try (Statement statement = connection.createStatement()) {
-      ResultSet resultSet = statement.executeQuery(MYSQL_SELECT_ALL_PEOPLE_QUERY);
-      List<Person> people = new ArrayList<>();
-      while (resultSet.next()) {
-        people.add(
-            new Person(
-                resultSet.getString("email"),
-                resultSet.getString("name"),
-                resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()));
-      }
-      return people;
-    }
+  Instant getTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
+    return resultSet.getTimestamp(columnLabel).toInstant();
   }
 }

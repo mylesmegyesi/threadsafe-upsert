@@ -6,13 +6,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Instant;
 import java.util.Properties;
 
 abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
-
   private static final String POSTGRES_USERNAME = "postgres";
   private static final String POSTGRES_PASSWORD = "postgres";
   private static final String POSTGRES_DATABASE_NAME = "threadsafe_upsert_test";
@@ -24,14 +21,13 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
           + "updated_at timestamp with time zone"
           + ")";
   private static final Properties props = getPostgresProperties();
-  private static final String POSTGRES_SELECT_ALL_PEOPLE_QUERY = "SELECT * FROM people";
 
   private static Connection getMasterDatabaseConnection() throws SQLException {
     return DriverManager.getConnection("jdbc:postgresql://localhost:9001/postgres", props);
   }
 
   private static Properties getPostgresProperties() {
-    Properties props = new Properties();
+    var props = new Properties();
     props.setProperty("user", POSTGRES_USERNAME);
     props.setProperty("password", POSTGRES_PASSWORD);
     return props;
@@ -44,8 +40,8 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   Void createTestDatabase() throws SQLException {
-    try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
-      try (Statement createDatabaseStatement = masterDatabaseConnection.createStatement()) {
+    try (var masterDatabaseConnection = getMasterDatabaseConnection()) {
+      try (var createDatabaseStatement = masterDatabaseConnection.createStatement()) {
         createDatabaseStatement.executeUpdate("CREATE DATABASE " + POSTGRES_DATABASE_NAME);
       }
     }
@@ -65,27 +61,15 @@ abstract class BasePostgresTest extends ThreadsafeUpsertTests<Void> {
 
   @Override
   void dropTestDatabase(Void database) throws SQLException {
-    try (Connection masterDatabaseConnection = getMasterDatabaseConnection()) {
-      try (Statement dropDatabaseStatement = masterDatabaseConnection.createStatement()) {
+    try (var masterDatabaseConnection = getMasterDatabaseConnection()) {
+      try (var dropDatabaseStatement = masterDatabaseConnection.createStatement()) {
         dropDatabaseStatement.executeUpdate("DROP DATABASE " + POSTGRES_DATABASE_NAME);
       }
     }
   }
 
   @Override
-  List<Person> fetchAllPeople(Connection connection) throws SQLException {
-    try (Statement statement = connection.createStatement()) {
-      ResultSet resultSet = statement.executeQuery(POSTGRES_SELECT_ALL_PEOPLE_QUERY);
-      List<Person> people = new ArrayList<>();
-      while (resultSet.next()) {
-        people.add(
-            new Person(
-                resultSet.getString("email"),
-                resultSet.getString("name"),
-                resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()));
-      }
-      return people;
-    }
+  Instant getTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
+    return resultSet.getTimestamp(columnLabel).toInstant();
   }
 }

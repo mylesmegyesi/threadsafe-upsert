@@ -1,7 +1,6 @@
 package com.mylesmegyesi;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -21,15 +20,15 @@ class MySqlInsertOnDuplicateKeyUpsertTest extends BaseMysqlTest {
   @Override
   UpsertResult upsert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(MYSQL_UPSERT)) {
-      Timestamp timestamp = Timestamp.from(updatedAt);
+    try (var statement = connection.prepareStatement(MYSQL_UPSERT)) {
+      var timestamp = Timestamp.from(updatedAt);
 
       statement.setString(1, email);
       statement.setString(2, name);
       statement.setTimestamp(3, timestamp);
       statement.setTimestamp(4, timestamp);
 
-      int numAffectedRows = statement.executeUpdate();
+      var numAffectedRows = statement.executeUpdate();
       if (numAffectedRows == 0) {
         return UpsertResult.StaleData;
       } else {

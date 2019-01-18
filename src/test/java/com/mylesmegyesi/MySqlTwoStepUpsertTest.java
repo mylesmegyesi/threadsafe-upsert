@@ -1,7 +1,6 @@
 package com.mylesmegyesi;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
@@ -27,8 +26,8 @@ class MySqlTwoStepUpsertTest extends BaseMysqlTest implements TwoStepUpsert.TwoS
 
   public boolean insert(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(MYSQL_INSERT)) {
-      Timestamp timestamp = Timestamp.from(updatedAt);
+    try (var statement = connection.prepareStatement(MYSQL_INSERT)) {
+      var timestamp = Timestamp.from(updatedAt);
       statement.setString(1, email);
       statement.setString(2, name);
       statement.setTimestamp(3, timestamp);
@@ -48,13 +47,13 @@ class MySqlTwoStepUpsertTest extends BaseMysqlTest implements TwoStepUpsert.TwoS
 
   public UpsertResult update(Connection connection, String email, String name, Instant updatedAt)
       throws SQLException {
-    try (PreparedStatement statement = connection.prepareStatement(MYSQL_UPDATE)) {
+    try (var statement = connection.prepareStatement(MYSQL_UPDATE)) {
       statement.setString(1, name);
       Timestamp timestamp = Timestamp.from(updatedAt);
       statement.setTimestamp(2, timestamp);
       statement.setString(3, email);
       statement.setTimestamp(4, timestamp);
-      int numAffectedRows = statement.executeUpdate();
+      var numAffectedRows = statement.executeUpdate();
       if (numAffectedRows > 0) {
         return UpsertResult.Success;
       } else {
